@@ -1,0 +1,44 @@
+import pandas as pd
+
+# ESG 중심 영어 감성 단어 + polarity 구성
+esg_sentiment_data = {
+    'word': [
+        # 긍정 (환경)
+        'sustainable', 'eco-friendly', 'renewable', 'decarbonized', 'energy-efficient',
+        # 긍정 (사회)
+        'inclusion', 'diversity', 'equality', 'fairness', 'well-being',
+        # 긍정 (지배구조)
+        'transparency', 'accountability', 'independent', 'disclosure', 'integrity',
+        # 일반 긍정
+        'achievement', 'improved', 'commitment', 'progress', 'successful',
+
+        # 부정 (환경)
+        'pollution', 'emissions', 'toxic', 'waste', 'non-compliance',
+        # 부정 (사회)
+        'discrimination', 'violation', 'harassment', 'inequality', 'unsafe',
+        # 부정 (지배구조)
+        'corruption', 'bribery', 'fraud', 'manipulation', 'opaque',
+        # 일반 부정
+        'controversy', 'criticism', 'deteriorate', 'failure', 'risk'
+    ],
+    'polarity': [
+        # 긍정 = 1
+        1,1,1,1,1,
+        1,1,1,1,1,
+        1,1,1,1,1,
+        1,1,1,1,1,
+        # 부정 = -1
+        -1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1
+    ]
+}
+
+df_esg_dict = pd.DataFrame(esg_sentiment_data)
+
+# 저장 경로
+save_path = '/content/drive/MyDrive/논문1/감성분석/sentiment_dict_esg_en.csv'
+df_esg_dict.to_csv(save_path, index=False)
+
+print(f'✅ ESG 영어 감성사전 저장 완료: {save_path}')
