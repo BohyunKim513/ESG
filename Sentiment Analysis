@@ -1,0 +1,77 @@
+import os
+import pandas as pd
+from google.colab import drive
+
+# ------------------------------------------------------------------------------------
+
+INPUT_DIR = '/content/drive/MyDrive/논문1/토큰화(사용O)/token_words2/tw2_cleaned'
+OUTPUT_PATH = '/content/drive/MyDrive/논문1/감성분석/tw2_sentiment_all.csv'
+SENTIMENT_DICT_PATH = '/content/drive/MyDrive/논문1/감성분석/sentiment_dict_esg_en.csv'
+
+def main():
+    # 1. Mount Google Drive
+    drive.mount('/content/drive')
+
+    # 2. Check Directories and Files
+    print(f"Checking input directory: {INPUT_DIR}")
+    if not os.path.exists(INPUT_DIR):
+        print("Error: Input directory not found.")
+        return
+
+    print(f"Loading sentiment lexicon from: {SENTIMENT_DICT_PATH}")
+    if not os.path.exists(SENTIMENT_DICT_PATH):
+        print("Error: Sentiment dictionary file not found.")
+        return
+
+    # 3. Load Sentiment Lexicon
+    sentiment_dict_df = pd.read_csv(SENTIMENT_DICT_PATH)
+    sentiment_dict = dict(zip(sentiment_dict_df['word'], sentiment_dict_df['polarity']))
+    print(f"Sentiment lexicon loaded. (Total words: {len(sentiment_dict)})")
+
+    # 4. Process Files (Batch Sentiment Analysis)
+    print("\nStarting batch sentiment analysis...")
+    results = []
+    file_list = sorted([f for f in os.listdir(INPUT_DIR) if f.endswith('.txt')])
+    
+    if not file_list:
+        print("[-] No text files found in the target directory.")
+        return
+
+    for file_name in file_list:
+        file_path = os.path.join(INPUT_DIR, file_name)
+
+        # Read text file
+        with open(file_path, 'r', encoding='utf-8') as f:
+            words = f.read().split()
+
+        # Calculate sentiment score
+        score = sum([sentiment_dict.get(word, 0) for word in words])
+
+        # Classify label
+        if score > 0:
+            label = 'positive'
+        elif score < 0:
+            label = 'negative'
+        else:
+            label = 'neutral'
+
+        # Store result
+        results.append({
+            'filename': file_name,
+            'score': score,
+            'label': label
+        })
+
+    # 5. Save Results to CSV
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+    result_df = pd.DataFrame(results)
+    
+    # Save with utf-8-sig to prevent encoding issues in Excel
+    result_df.to_csv(OUTPUT_PATH, index=False, encoding='utf-8-sig')
+
+    # 6. Final Log
+    print(f"\n[+] Successfully analyzed {len(result_df)} files.")
+    print(f"[+] Results saved to: {OUTPUT_PATH}")
+
+if __name__ == "__main__":
+    main()
