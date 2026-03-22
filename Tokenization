@@ -1,0 +1,101 @@
+# 1. Environment Setup
+!pip install -U spacy
+!python -m spacy download en_core_web_sm
+
+import os
+import re
+import spacy
+from google.colab import drive
+
+# ------------------------------------------------------------------------------------
+BASE_NAME = 'HM2019'
+
+# 경로 자동 설정
+RAW_PATH = f'/content/drive/MyDrive/논문1/raw/{BASE_NAME}_raw.txt'
+CLEANED_PATH = f'/content/drive/MyDrive/논문1/cleaned2/{BASE_NAME}_cleaned2.txt'
+SENTENCE_PATH = f'/content/drive/MyDrive/논문1/token_sentences2/{BASE_NAME}_ts2.txt'
+WORD_PATH = f'/content/drive/MyDrive/논문1/token_words2/{BASE_NAME}_tw2.txt'
+
+def clean_text(text):
+    """Cleans raw text by handling whitespace and common abbreviations."""
+    text = text.replace('\n', ' ')
+    text = re.sub(r'\s+', ' ', text)
+    
+    # 문장 분리 오류를 방지하기 위한 축약어 처리
+    replacements = {
+        'e.g.': 'eg', 'i.e.': 'ie', 'p.m.': 'pm', 'a.m.': 'am',
+        'Dr.': 'Dr', 'Mr.': 'Mr', 'Ms.': 'Ms',
+        'Jan.': 'Jan', 'Feb.': 'Feb'
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+        
+    return text.strip()
+
+def main():
+    # Mount Google Drive
+    drive.mount('/content/drive')
+
+    # Ensure output directories exist
+    os.makedirs(os.path.dirname(CLEANED_PATH), exist_ok=True)
+    os.makedirs(os.path.dirname(SENTENCE_PATH), exist_ok=True)
+    os.makedirs(os.path.dirname(WORD_PATH), exist_ok=True)
+
+    # 1. Load raw text
+    print(f"Loading raw text from: {RAW_PATH}")
+    if not os.path.exists(RAW_PATH):
+        print("Error: Raw file not found.")
+        return
+
+    with open(RAW_PATH, 'r', encoding='utf-8') as f:
+        raw_text = f.read()
+
+    # 2. Clean text
+    print("Cleaning text...")
+    cleaned_text = clean_text(raw_text)
+    
+    with open(CLEANED_PATH, 'w', encoding='utf-8') as f:
+        f.write(cleaned_text)
+    print(f"  -> Saved cleaned text: {os.path.basename(CLEANED_PATH)}")
+
+    # 3. Load spaCy model
+    print("Loading spaCy model (en_core_web_sm)...")
+    try:
+        nlp = spacy.load('en_core_web_sm')
+    except OSError:
+        print("Error: spaCy model not found. Please run: !python -m spacy download en_core_web_sm")
+        return
+
+    # 4. Sentence Tokenization
+    print("Tokenizing sentences...")
+    doc = nlp(cleaned_text)
+    sentences = [sent.text.strip() for sent in doc.sents if sent.text.strip()]
+    
+    with open(SENTENCE_PATH, 'w', encoding='utf-8') as f:
+        for sent in sentences:
+            f.write(sent + '\n')
+    print(f"  -> Saved {len(sentences)} sentences: {os.path.basename(SENTENCE_PATH)}")
+
+    # 5. Word Tokenization (Filtering stopwords, punctuation, short words)
+    print("Tokenizing and filtering words...")
+    tokenized_words = []
+    
+    for sentence in sentences:
+        sent_doc = nlp(sentence)
+        words = [
+            token.text.lower()
+            for token in sent_doc
+            if not token.is_stop and not token.is_punct and len(token.text) > 2
+        ]
+        if words:
+            tokenized_words.append(words)
+
+    with open(WORD_PATH, 'w', encoding='utf-8') as f:
+        for words in tokenized_words:
+            f.write(' '.join(words) + '\n')
+    print(f"  -> Saved word tokens for {len(tokenized_words)} lines: {os.path.basename(WORD_PATH)}")
+
+    print("\nFull NLP pipeline completed successfully.")
+
+if __name__ == "__main__":
+    main()
