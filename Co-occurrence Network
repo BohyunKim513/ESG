@@ -1,0 +1,117 @@
+import os
+import re
+import itertools
+import pandas as pd
+import networkx as nx
+from collections import Counter
+from google.colab import drive
+
+# ------------------------------------------------------------------------------------
+
+INPUT_DIR = '/content/drive/MyDrive/논문1/token_words2/tw2_cleaned'
+
+# Base directory for Semantic Network 1 (Co-occurrence)
+BASE_OUT_DIR = '/content/drive/MyDrive/논문1/의미네트워크1'
+EDGES_DIR = os.path.join(BASE_OUT_DIR, 'Cooccurrence_Edges')
+GRAPH_DIR = os.path.join(BASE_OUT_DIR, 'NetGraph')
+REPORT_DIR = os.path.join(BASE_OUT_DIR, 'NetReport')
+
+MIN_COOCCURRENCE_COUNT = 2
+
+def build_cooccurrence_edges(transactions, min_count=2):
+    """문장 단위 단어 리스트(transactions)로부터 공동출현 엣지 가중치를 계산"""
+    pairs = []
+    for words in transactions:
+        # 한 문장 내 고유 단어들 간의 조합(Combination)
+        unique_words = sorted(set(words))
+        pairs.extend(itertools.combinations(unique_words, 2))
+        
+    pair_counts = Counter(pairs)
+
+    edge_list = [
+        {'source': a, 'target': b, 'weight': w}
+        for (a, b), w in pair_counts.items() if w >= min_count
+    ]
+    return pd.DataFrame(edge_list)
+
+def clean_node_name(s):
+    """GraphML(XML) 저장 시 에러를 유발하는 제어 문자를 제거"""
+    s = str(s)
+    return re.sub(r'[\x00-\x1F\x7F\n\r\t]', '', s)
+
+def main():
+    # 1. Mount Google Drive
+    drive.mount('/content/drive')
+
+    # 2. Create Output Directories
+    os.makedirs(EDGES_DIR, exist_ok=True)
+    os.makedirs(GRAPH_DIR, exist_ok=True)
+    os.makedirs(REPORT_DIR, exist_ok=True)
+
+    # 3. Get Target Files
+    print(f"Scanning input directory: {INPUT_DIR}")
+    file_list = sorted([f for f in os.listdir(INPUT_DIR) if f.endswith('.txt')])
+    total_files = len(file_list)
+    print(f"Found {total_files} files to process. Starting pipeline...\n")
+
+    # 4. Processing Pipeline
+    for idx, filename in enumerate(file_list, 1):
+        input_path = os.path.join(INPUT_DIR, filename)
+        base_name = os.path.splitext(filename)[0].replace('_tw2', '')
+        
+        print(f"[{idx}/{total_files}] Processing: {base_name}")
+
+        # [Phase 1] Load Text & Extract Transactions
+        with open(input_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            transactions = [line.strip().split() for line in lines if line.strip()]
+
+        if not transactions:
+            print(f"  [-] Warning: No valid words found in {filename}. Skipping.")
+            continue
+
+        # [Phase 2] Build Co-occurrence Edges
+        edges_df = build_cooccurrence_edges(transactions, min_count=MIN_COOCCURRENCE_COUNT)
+        if edges_df.empty:
+            print(f"  [-] Warning: No co-occurrence edges meet the minimum count of {MIN_COOCCURRENCE_COUNT}. Skipping network analysis.")
+            continue
+            
+        edges_path = os.path.join(EDGES_DIR, f"{base_name}_ce.csv")
+        edges_df.to_csv(edges_path, index=False, encoding='utf-8-sig')
+
+        # [Phase 3] Build NetworkX Graph
+        G = nx.Graph()
+        for _, row in edges_df.iterrows():
+            G.add_edge(row['source'], row['target'], weight=row['weight'])
+
+        # Clean node names for XML compatibility
+        mapping = {node: clean_node_name(node) for node in G.nodes}
+        G = nx.relabel_nodes(G, mapping)
+
+        # Save GraphML
+        graph_path = os.path.join(GRAPH_DIR, f"{base_name}_network.graphml")
+        nx.write_graphml(G, graph_path)
+
+        # [Phase 4] Calculate Centrality Metrics
+        print("  -> Calculating network centralities (This may take a while)...")
+        degree_dict = dict(G.degree())
+        weighted_degree = dict(G.degree(weight='weight'))
+        betweenness = nx.betweenness_centrality(G, weight='weight', normalized=True)
+
+        report_df = pd.DataFrame({
+            'node': list(G.nodes),
+            'degree': [degree_dict[n] for n in G.nodes],
+            'weighted_degree': [weighted_degree[n] for n in G.nodes],
+            'betweenness': [betweenness[n] for n in G.nodes]
+        }).sort_values(by='weighted_degree', ascending=False)
+
+        # Save Report
+        report_path = os.path.join(REPORT_DIR, f"{base_name}_nreport.csv")
+        report_df.to_csv(report_path, index=False, encoding='utf-8-sig')
+
+        print(f"  [+] Saved Edges, GraphML, and Report successfully.\n")
+
+    print("All network analysis processes completed.")
+
+if __name__ == "__main__":
+    main()
